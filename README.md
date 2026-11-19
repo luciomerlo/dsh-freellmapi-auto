@@ -162,7 +162,7 @@ of this repository, so the installed files are reproducible.
 ```sh
 git clone https://github.com/luciomerlo/dsh-freellmapi-auto.git
 cd dsh-freellmapi-auto
-node --test        # 60 tests, no network access required
+node --test        # 69 tests, no network access required
 ```
 
 Then install the directory through the Harness:
@@ -265,14 +265,13 @@ here can break a native Claude CLI installation on the same machine.
 Two same-origin HTTP routes:
 
 - `GET /freellmapi-auto/status` — counters, reachable route count, per-bucket
-  cooldowns, and the last turns.
+  cooldowns, and the last turns: the physical route that answered
+  (`cerebras → qwen-3-coder`), estimated tokens against that route's TPM cap, the
+  silent-fallback counter, and every bucket in cooldown with its remaining time.
 - `POST /freellmapi-auto/sync` — re-read the store now.
 
-The composer dock shows the same data live: the physical route that answered
-(`cerebras → qwen-3-coder`), estimated tokens against that route's TPM cap, the
-silent-fallback counter, and every bucket in cooldown with its remaining time.
-
-Logs are one line per handoff:
+The plugin adds no UI of its own; it registers no slot and draws nothing in the
+conversation. Read the status route, or watch the log:
 
 ```
 freellmapi: groq -> llama-3.3-70b-versatile failed (RATE_LIMIT); switching to cerebras -> qwen-3-coder
@@ -332,7 +331,6 @@ src/stream.js         SSE frames -> harness StreamChunks
 src/sse.js            SSE decoding and the two watchdogs
 src/tokens.js         request-size estimation
 src/telemetry.js      bounded, credential-free status buffer
-client.js             composer dock status cell
 ```
 
 ---

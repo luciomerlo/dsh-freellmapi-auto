@@ -94,9 +94,10 @@ The plugin owns two same-origin HTTP routes:
   cooldowns, and the last turns.
 - `POST /freellmapi-auto/sync` — re-read the store now.
 
-The composer dock shows the same data: the active physical route, estimated
-tokens against that route's TPM, the silent-fallback counter, and every bucket in
-cooldown with its remaining time.
+The status route reports the active physical route, estimated tokens against that
+route's TPM, the silent-fallback counter, and every bucket in cooldown with its
+remaining time. The plugin draws nothing in the conversation: it registers no UI
+slot and adds no entry to the composer.
 
 ## Limits worth knowing
 

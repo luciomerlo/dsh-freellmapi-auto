@@ -87,6 +87,10 @@ export async function* readSse(body, signal, limits = {}) {
   let eventId
   let dataLines = []
   let sawFrame = false
+  // Deadlines are measured from the last complete frame, not from the last byte
+  // read: a gateway that sends `: keep-alive` comments every few seconds would
+  // otherwise reset the watchdog forever while producing no tokens at all.
+  let lastFrameAt = Date.now()
 
   const flush = () => {
     if (dataLines.length === 0 && eventName === undefined) return undefined
@@ -102,9 +106,14 @@ export async function* readSse(body, signal, limits = {}) {
   try {
     for (;;) {
       if (signal?.aborted === true) throw signal.reason ?? new Error('the stream was cancelled')
-      const deadline = sawFrame ? idleTimeoutMs : Math.max(idleTimeoutMs, firstTokenTimeoutMs)
       const phase = sawFrame ? 'idle' : 'first-token'
-      const step = await nextWithDeadline(iterator, deadline, phase)
+      const budget = sawFrame ? idleTimeoutMs : Math.max(idleTimeoutMs, firstTokenTimeoutMs)
+      let remaining = 0
+      if (budget > 0) {
+        remaining = budget - (Date.now() - lastFrameAt)
+        if (remaining <= 0) throw new StreamIdleError(budget, phase)
+      }
+      const step = await nextWithDeadline(iterator, budget > 0 ? remaining : 0, phase)
       if (step.done) break
 
       buffer += decoder.decode(step.value, { stream: true })
@@ -117,6 +126,7 @@ export async function* readSse(body, signal, limits = {}) {
           const frame = flush()
           if (frame !== undefined) {
             sawFrame = true
+            lastFrameAt = Date.now()
             yield frame
           }
         } else if (line.startsWith('data:')) {

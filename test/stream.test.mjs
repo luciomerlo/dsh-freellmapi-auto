@@ -111,6 +111,35 @@ test('a provider that never starts answering trips the first-token watchdog', as
   }, (error) => error instanceof StreamIdleError && error.phase === 'first-token')
 })
 
+test('keep-alive comments do not defeat the first-token watchdog', async () => {
+  let timer
+  const body = new ReadableStream({
+    start(controller) {
+      // A gateway that keeps the socket warm with comments but produces nothing.
+      timer = setInterval(() => {
+        try {
+          controller.enqueue(new TextEncoder().encode(': keep-alive\n\n'))
+        } catch {
+          clearInterval(timer)
+        }
+      }, 25)
+    },
+    cancel() {
+      clearInterval(timer)
+    },
+  })
+  const stream = toStreamChunks(body, 'chatty/model', undefined, {
+    firstTokenTimeoutMs: 120,
+    idleTimeoutMs: 120,
+  })
+  const started = Date.now()
+  await assert.rejects(async () => {
+    for await (const chunk of stream) void chunk
+  }, (error) => error instanceof StreamIdleError && error.phase === 'first-token')
+  clearInterval(timer)
+  assert.ok(Date.now() - started < 1500, 'the watchdog must fire on frame silence, not byte silence')
+})
+
 test('finish reasons map onto the harness vocabulary', () => {
   assert.deepEqual(finishReasonOf('length', false), { kind: 'max-tokens' })
   assert.deepEqual(finishReasonOf('tool_calls', false), { kind: 'tool-calls' })

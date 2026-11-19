@@ -62,7 +62,11 @@ export function failureFacts(error, signal) {
   if (error !== null && typeof error === 'object') {
     const candidate = /** @type {any} */ (error)
     if (candidate.name === 'AbortError') {
-      return { message: 'the request was cancelled', code: 'ABORTED' }
+      // Only our own deadlines abort without a caller signal, so an AbortError
+      // with no cancelled request is a transport timeout, not user cancellation.
+      return signal?.aborted === true
+        ? { message: 'the request was cancelled', code: 'ABORTED' }
+        : { message: candidate.message === '' ? 'the provider stopped responding' : candidate.message, code: 'TIMEOUT' }
     }
     if (typeof candidate.code === 'string' && candidate.code !== '') {
       return {

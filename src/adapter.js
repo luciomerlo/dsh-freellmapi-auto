@@ -256,6 +256,11 @@ export function createAdapter(parts) {
         yield chunk
         continue
       }
+      if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+        state.outputChars += chunk.text.length
+      } else if (chunk.type === 'tool-call-delta') {
+        state.outputChars += chunk.argumentsDelta.length
+      }
       if (VISIBLE_CHUNKS.has(chunk.type)) {
         if (!state.visible) state.ttftMs = Date.now() - state.startedAt
         state.visible = true
@@ -370,36 +375,49 @@ export function createAdapter(parts) {
         startedAt: Date.now(),
         visible: false,
         ttftMs: 0,
+        outputChars: 0,
         finish: undefined,
         failure: undefined,
         usage: undefined,
       }
 
       try {
-        const remainingFirstToken = Math.max(1500, (Number(config.firstTokenTimeoutMs) || 7000) - (Date.now() - startedAt))
+        // Time-to-first-token is a property of one provider attempt, not of the
+        // turn: a slow first route must not starve the route that follows it.
+        const firstTokenBudget = Math.max(1500, Number(config.firstTokenTimeoutMs) || 7000)
         const opened = await transport.open({
           target,
           model: model.modelId,
           body: bodyFor(options, model),
           signal: options.signal,
-          connectTimeoutMs: remainingFirstToken,
+          connectTimeoutMs: firstTokenBudget,
         })
-        const chunks = opened.kind === 'sse'
-          ? toStreamChunks(opened.body, model.modelId, options.signal, {
-            idleTimeoutMs: Number(config.streamIdleTimeoutMs) || 12_000,
-            firstTokenTimeoutMs: remainingFirstToken,
-          })
-          : completionToChunks(opened.payload, model.modelId)
-        for await (const chunk of track(chunks, state)) {
-          yield chunk
+        try {
+          const chunks = opened.kind === 'sse'
+            ? toStreamChunks(opened.body, model.modelId, options.signal, {
+              idleTimeoutMs: Number(config.streamIdleTimeoutMs) || 12_000,
+              firstTokenTimeoutMs: firstTokenBudget,
+            })
+            : completionToChunks(opened.payload, model.modelId)
+          for await (const chunk of track(chunks, state)) {
+            yield chunk
+          }
+        } finally {
+          // Release the transport's whole-attempt deadline once this attempt is
+          // over, so its timer never outlives the request it guards.
+          opened.release?.()
         }
       } catch (error) {
         state.failure = failureFacts(error, options.signal)
       }
 
-      if (state.usage !== undefined) {
-        const spent = state.usage.totalTokens
-          ?? ((state.usage.inputTokens ?? 0) + (state.usage.outputTokens ?? 0))
+      // Charge the bucket for what this attempt spent. Most free gateways omit
+      // usage, so the estimate stands in: the request size plus what streamed
+      // back. Without it the TPM window would stay empty and never throttle.
+      if (state.visible || state.usage !== undefined) {
+        const spent = state.usage === undefined
+          ? facts.tokens + Math.ceil(state.outputChars * (Number(config.tokensPerCharacter) || 0.25))
+          : state.usage.totalTokens ?? ((state.usage.inputTokens ?? 0) + (state.usage.outputTokens ?? 0))
         quotas.noteTokens(target.bucket, spent)
       }
 

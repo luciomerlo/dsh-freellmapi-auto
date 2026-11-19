@@ -157,7 +157,7 @@ async function run({ models, script, config = {}, model = 'auto', provider = 'fr
   })) {
     chunks.push(chunk)
   }
-  return { chunks, adapter, calls: transport.calls, telemetry }
+  return { chunks, adapter, calls: transport.calls, telemetry, quotas }
 }
 
 test('a 429 rotates to a different physical provider instead of another alias of the same one', async () => {
@@ -334,14 +334,43 @@ test('the harness retry policy is finite and covers post-output failures', () =>
 })
 
 test('provider metadata names the route', () => {
-  const { adapter } = { adapter: createAdapter({
+  const adapter = createAdapter({
     config: resolveConfig({}),
     inventory: fakeInventory([]),
     quotas: new QuotaRegistry({ config: resolveConfig({}), logger }),
     transport: fakeTransport({}),
     telemetry: { noteRoutes() {}, noteSync() {}, recordTurn() {}, state: () => ({}) },
     logger,
-  }) }
+  })
   assert.deepEqual(adapter.providerInfo('freellmapi-fast'), { id: 'freellmapi-fast', name: 'FreeLLMApi - Ultra Fast' })
   assert.deepEqual(adapter.providerInfo('elsewhere'), { id: 'elsewhere', name: 'FreeLLMApi' })
+})
+
+test('a gateway that omits usage is still charged against its token window', async () => {
+  const noUsage = [
+    { choices: [{ delta: { content: 'x'.repeat(400) } }] },
+    { choices: [{ delta: {}, finish_reason: 'stop' }] },
+  ]
+  const { quotas } = await run({
+    models: [route({ modelId: 'quiet', pin: 'groq/quiet', bucket: 'groq:1' })],
+    script: { quiet: [{ frames: noUsage }] },
+  })
+  const minuteTokens = quotas.snapshot().find((row) => row.bucket === 'groq:1')?.minuteTokens ?? 0
+  assert.ok(minuteTokens >= 100, `expected an estimated charge, got ${String(minuteTokens)}`)
+})
+
+test('an attempt that failed before producing output is not charged tokens', async () => {
+  const { quotas } = await run({
+    models: [
+      route({ modelId: 'throttled', pin: 'groq/throttled', bucket: 'groq:1' }),
+      route({ modelId: 'fine', pin: 'cerebras/fine', platform: 'cerebras', bucket: 'cerebras:2' }),
+    ],
+    script: {
+      throttled: [{ status: 429, code: 'RATE_LIMIT' }],
+      fine: [{ frames: okFrames }],
+    },
+  })
+  const throttled = quotas.snapshot().find((row) => row.bucket === 'groq:1')
+  assert.equal(throttled?.minuteTokens ?? 0, 0)
+  assert.ok((throttled?.minuteRequests ?? 0) >= 1)
 })

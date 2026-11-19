@@ -1,7 +1,0 @@
-{
-  "meta": {
-    "title": "FreeLLMAPI Auto",
-    "description": "Enruta cada turno entre los proveedores gratuitos que ya tienes en tu almacén de FreeLLMAPI, eligiendo por ajuste de contexto, presupuesto de tokens por minuto y salud reciente, y conmutando en silencio cuando una ruta se satura o se congela.",
-    "detail": "docs/DETAIL.md"
-  }
-}

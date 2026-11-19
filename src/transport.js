@@ -43,9 +43,27 @@ export class HttpTransport {
     const url = `${target.baseUrl}/chat/completions`
     const requestTimeoutMs = Number(this.config.requestTimeoutMs) || 180_000
     const connectBudget = Number(connectTimeoutMs) > 0 ? Number(connectTimeoutMs) : requestTimeoutMs
-    const timeoutMs = Math.min(requestTimeoutMs, connectBudget)
-    const timeout = AbortSignal.timeout(timeoutMs)
-    const combined = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
+    const connectMs = Math.min(requestTimeoutMs, connectBudget)
+
+    // The connect deadline must cover the response headers only. A signal owned
+    // by the whole fetch also governs the body, so leaving it armed would abort
+    // a healthy stream once the header deadline expired mid-answer.
+    const controller = new AbortController()
+    let connectExpired = false
+    let attemptExpired = false
+    const connectTimer = setTimeout(() => {
+      connectExpired = true
+      controller.abort()
+    }, connectMs)
+    const attemptTimer = setTimeout(() => {
+      attemptExpired = true
+      controller.abort()
+    }, requestTimeoutMs)
+    const stopTimers = () => {
+      clearTimeout(connectTimer)
+      clearTimeout(attemptTimer)
+    }
+    const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
 
     let response
     try {
@@ -62,12 +80,13 @@ export class HttpTransport {
         redirect: 'follow',
       })
     } catch (error) {
+      stopTimers()
       if (signal?.aborted === true) {
         throw new RouteError({ message: 'the request was cancelled', code: 'ABORTED', provider: target.bucket, model })
       }
-      if (timeout.aborted) {
+      if (connectExpired || attemptExpired) {
         throw new RouteError({
-          message: `${model}: the provider did not answer within ${String(timeoutMs)}ms`,
+          message: `${model}: the provider did not answer within ${String(connectMs)}ms`,
           code: 'TIMEOUT',
           provider: target.bucket,
           model,
@@ -77,7 +96,11 @@ export class HttpTransport {
       throw new RouteError({ message: `${model}: ${detail}`, code: 'TRANSPORT', provider: target.bucket, model })
     }
 
+    // Headers are in: the first-token budget is spent and must not fire later.
+    clearTimeout(connectTimer)
+
     if (!response.ok) {
+      stopTimers()
       const detail = await readErrorDetail(response)
       const code = codeForStatus(response.status, detail)
       throw new RouteError({
@@ -94,12 +117,13 @@ export class HttpTransport {
 
     const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
     if (contentType.includes('text/event-stream') && response.body !== null) {
-      return { kind: 'sse', body: response.body }
+      return { kind: 'sse', body: response.body, release: stopTimers }
     }
 
     // Some gateways ignore `stream: true`. Read the body once and decide from
     // its shape rather than from a content type they may not set.
     const text = await response.text().catch(() => '')
+    stopTimers()
     if (text.trim() === '') {
       throw new RouteError({
         message: `${model}: the provider returned an empty body`,

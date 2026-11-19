@@ -51,6 +51,16 @@ test('aborts are reported as ABORTED even when the cause is a plain rejection', 
   assert.equal(failureFacts(new Error('socket timed out')).code, 'TIMEOUT')
 })
 
+test('an AbortError without a cancelled request is a transport timeout', () => {
+  const abortError = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'AbortError' })
+  assert.equal(failureFacts(abortError).code, 'TIMEOUT')
+  assert.equal(failureFacts(abortError, new AbortController().signal).code, 'TIMEOUT')
+
+  const controller = new AbortController()
+  controller.abort()
+  assert.equal(failureFacts(abortError, controller.signal).code, 'ABORTED')
+})
+
 test('Retry-After parses seconds and HTTP dates', () => {
   assert.equal(retryAfterMs('3'), 3000)
   const future = new Date(Date.now() + 5000).toUTCString()

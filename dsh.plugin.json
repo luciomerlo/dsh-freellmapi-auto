@@ -8,7 +8,6 @@
     "row": "freellmapi-auto",
     "package": "dsh-freellmapi-auto",
     "host": "./index.js",
-    "client": "./client.js",
     "patch": "./cordis.patch.yml"
   },
   "requires": {
@@ -51,9 +50,6 @@
     "httpRoutes": [
       { "method": "GET", "path": "/freellmapi-auto/status" },
       { "method": "POST", "path": "/freellmapi-auto/sync" }
-    ],
-    "uiSlots": [
-      { "slot": "conversation.composer.dock", "id": "freellmapi-status" }
     ]
   },
   "upstream": {

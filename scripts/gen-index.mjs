@@ -47,28 +47,26 @@ if (!/^[0-9a-f]{40}$/u.test(commit)) {
 }
 
 const locale = JSON.parse(readFileSync(join(root, 'locale', 'en.json'), 'utf8'))
-const spanish = JSON.parse(readFileSync(join(root, 'locale', 'es.json'), 'utf8'))
 const homepage = `https://github.com/${repositoryUrl.split('/').slice(-2).join('/')}`
 
 const index = {
   format: 1,
-  title: { en: 'FreeLLMAPI Auto', es: 'FreeLLMAPI Auto' },
+  title: { en: 'FreeLLMAPI Auto' },
   description: {
     en: 'A DeepSeek Harness bundle that routes free-tier model providers with context- and TPM-aware selection.',
-    es: 'Un bundle de DeepSeek Harness que enruta proveedores gratuitos con selección por contexto y TPM.',
   },
   metadata: {
-    categories: { routing: { title: { en: 'Routing', es: 'Enrutamiento' } } },
+    categories: { routing: { title: { en: 'Routing' } } },
     labels: {
-      failover: { title: { en: 'Failover', es: 'Conmutación' } },
-      'llm-provider': { title: { en: 'LLM provider', es: 'Proveedor LLM' } },
+      failover: { title: { en: 'Failover' } },
+      'llm-provider': { title: { en: 'LLM provider' } },
     },
   },
   plugins: [
     {
       name: manifest.name,
-      title: { en: locale.meta.title, es: spanish.meta.title },
-      description: { en: locale.meta.description, es: spanish.meta.description },
+      title: { en: locale.meta.title },
+      description: { en: locale.meta.description },
       icon: `https://raw.githubusercontent.com/${repositoryUrl.split('/').slice(-2).join('/')}/main/icon.svg`,
       author: 'Lucio Merlo',
       homepage,

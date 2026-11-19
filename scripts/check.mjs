@@ -75,10 +75,17 @@ if (existsSync(pluginManifestPath)) {
   const plugin = readJson(pluginManifestPath)
   if (plugin.name !== manifest.name) fail('dsh.plugin.json: name differs from package.json')
   if (plugin.version !== manifest.version) fail('dsh.plugin.json: version differs from package.json')
-  for (const key of ['host', 'client', 'patch']) {
+  for (const key of ['host', 'patch']) {
     const path = plugin.entry?.[key]
     if (typeof path !== 'string' || !existsSync(join(root, path))) {
       fail(`dsh.plugin.json: entry.${key} ${String(path)} does not exist`)
+    }
+  }
+  // A client half is optional; when declared it must exist.
+  if (plugin.entry?.client !== undefined) {
+    const path = plugin.entry.client
+    if (typeof path !== 'string' || !existsSync(join(root, path))) {
+      fail(`dsh.plugin.json: entry.client ${String(path)} does not exist`)
     }
   }
 } else {
@@ -94,12 +101,13 @@ else if (versionMatch[1] !== manifest.version) {
 }
 
 // 3. Locale metadata and the detail document are what Plugin Manager shows.
-for (const locale of ['en', 'es']) {
-  const path = join(root, 'locale', `${locale}.json`)
-  if (!existsSync(path)) {
-    fail(`locale/${locale}.json is missing`)
-    continue
-  }
+const localeDir = join(root, 'locale')
+const locales = existsSync(localeDir)
+  ? readdirSync(localeDir).filter((name) => name.endsWith('.json')).map((name) => name.slice(0, -5))
+  : []
+if (!locales.includes('en')) fail('locale/en.json is missing')
+for (const locale of locales) {
+  const path = join(localeDir, `${locale}.json`)
   let value
   try {
     value = readJson(path)
