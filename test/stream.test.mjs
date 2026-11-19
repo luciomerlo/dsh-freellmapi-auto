@@ -140,6 +140,36 @@ test('keep-alive comments do not defeat the first-token watchdog', async () => {
   assert.ok(Date.now() - started < 1500, 'the watchdog must fire on frame silence, not byte silence')
 })
 
+test('valueless frames do not count as progress', async () => {
+  let timer
+  const body = new ReadableStream({
+    start(controller) {
+      // A gateway that keeps answering `{"choices":[{"delta":{}}]}` forever
+      // while producing no tokens at all.
+      timer = setInterval(() => {
+        try {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{}}]}\n\n'))
+        } catch {
+          clearInterval(timer)
+        }
+      }, 20)
+    },
+    cancel() {
+      clearInterval(timer)
+    },
+  })
+  const stream = toStreamChunks(body, 'hollow/model', undefined, {
+    idleTimeoutMs: 120,
+    firstTokenTimeoutMs: 120,
+  })
+  const started = Date.now()
+  await assert.rejects(async () => {
+    for await (const chunk of stream) void chunk
+  }, (error) => error instanceof StreamIdleError && error.phase === 'idle')
+  clearInterval(timer)
+  assert.ok(Date.now() - started < 2000, 'the watchdog must fire on content silence')
+})
+
 test('finish reasons map onto the harness vocabulary', () => {
   assert.deepEqual(finishReasonOf('length', false), { kind: 'max-tokens' })
   assert.deepEqual(finishReasonOf('tool_calls', false), { kind: 'tool-calls' })

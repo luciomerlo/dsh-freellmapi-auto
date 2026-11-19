@@ -132,16 +132,21 @@ export function createAdapter(parts) {
 
   /**
    * Catalog entry for one pinned route.
+   *
+   * The `provider` field must name the route that owns the entry, not the route
+   * it points at: the `llm` service rejects the whole catalog otherwise.
+   *
    * @param {any} model - the inventory model.
+   * @param {string} provider - the harness route id this entry belongs to.
    * @returns {object} the `LlmModelInfo`.
    */
-  function pinnedInfo(model) {
+  function pinnedInfo(model, provider) {
     const platform = platformLabel(model.platform)
     const context = model.contextWindow === null
       ? 'context unknown'
       : `${String(Math.round(model.contextWindow / 1024))}K context`
     return {
-      provider: model.pin,
+      provider,
       id: model.pin,
       name: model.displayName,
       description: `${platform} · ${context}${model.supportsTools ? ' · tools' : ' · no tools'}`,
@@ -168,13 +173,22 @@ export function createAdapter(parts) {
    * @returns {number} a context window in tokens.
    */
   function autoContextWindow() {
-    const configured = Number(config.autoContextWindow) || 131_072
+    const configured = Math.trunc(Number(config.autoContextWindow) || 131_072)
     let widest = 0
     for (const model of inventory.snapshot.models) {
       if (model.supportsTools && model.contextWindow !== null) widest = Math.max(widest, model.contextWindow)
     }
     if (widest === 0) return configured
-    return Math.max(32_768, Math.min(configured, widest))
+    return Math.max(32_768, Math.min(configured, Math.trunc(widest)))
+  }
+
+  /**
+   * The output cap one route advertises.
+   * @returns {number} a positive safe integer.
+   */
+  function defaultMaxTokens() {
+    const configured = Math.trunc(Number(config.defaultMaxOutputTokens) || 8_192)
+    return configured > 0 ? configured : 8_192
   }
 
   /**
@@ -570,7 +584,9 @@ export function createAdapter(parts) {
       const limit = provider === 'freellmapi-models'
         ? Number(config.modelsRouteSize) || 48
         : Number(config.pinsPerRoute) || 4
-      const pins = pinsFor(profile, limit).map(pinnedInfo)
+      const pins = pinsFor(profile, limit)
+        .filter((model) => model.pin !== AUTO_ID)
+        .map((model) => pinnedInfo(model, provider))
       if (provider === 'freellmapi-models') return pins
       return [
         {
@@ -598,29 +614,31 @@ export function createAdapter(parts) {
           id: AUTO_ID,
           name: autoName(provider),
           context: { contextWindow: autoContextWindow() },
-          defaultMaxTokens: Number(config.defaultMaxOutputTokens) || 8192,
+          defaultMaxTokens: defaultMaxTokens(),
           inputModalities: ['text'],
         }
       }
+      const fallbackContext = Math.max(1, Math.trunc(Number(config.defaultContextWindow) || 131_072))
       const model = inventory.modelByPin(modelId)
       if (model === undefined) {
         return {
           provider,
           id: modelId,
           name: modelId,
-          context: { contextWindow: Number(config.defaultContextWindow) || 131_072 },
-          defaultMaxTokens: Number(config.defaultMaxOutputTokens) || 8192,
+          context: { contextWindow: fallbackContext },
+          defaultMaxTokens: defaultMaxTokens(),
           inputModalities: ['text'],
         }
       }
+      const contextWindow = model.contextWindow === null
+        ? fallbackContext
+        : Math.max(1, Math.trunc(model.contextWindow))
       return {
         provider,
-        id: model.pin,
+        id: modelId,
         name: model.displayName,
-        context: {
-          contextWindow: model.contextWindow ?? Number(config.defaultContextWindow) ?? 131_072,
-        },
-        defaultMaxTokens: Number(config.defaultMaxOutputTokens) || 8192,
+        context: { contextWindow },
+        defaultMaxTokens: defaultMaxTokens(),
         inputModalities: ['text'],
       }
     },

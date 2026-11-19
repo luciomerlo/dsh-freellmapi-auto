@@ -14,7 +14,7 @@
  * @module dsh-freellmapi-auto/stream
  */
 
-import { readSseJson } from './sse.js'
+import { StreamIdleError, readSseJson } from './sse.js'
 
 /**
  * Read the text, reasoning, and tool-call deltas of one upstream chunk.
@@ -214,6 +214,11 @@ class ChunkBuilder {
  */
 export async function* toStreamChunks(body, model, signal, limits = {}) {
   const builder = new ChunkBuilder(model)
+  const idleTimeoutMs = Number(limits.idleTimeoutMs) > 0 ? Number(limits.idleTimeoutMs) : 0
+  // Tracks content, not traffic. A gateway that keeps the connection warm with
+  // valueless frames (`{"choices":[{"delta":{}}]}`) is as stalled as one that
+  // sends nothing at all, and must trip the watchdog just the same.
+  let lastProgressAt = Date.now()
   let finish = ''
   let usage
   /** @type {{message: string, code: string} | undefined} */
@@ -223,6 +228,9 @@ export async function* toStreamChunks(body, model, signal, limits = {}) {
     for await (const frame of readSseJson(body, signal, limits)) {
       const chunk = frame.value
       if (chunk === null || typeof chunk !== 'object') continue
+      if (idleTimeoutMs > 0 && Date.now() - lastProgressAt > idleTimeoutMs) {
+        throw new StreamIdleError(idleTimeoutMs, 'idle')
+      }
 
       // Some gateways report a failure inside an otherwise healthy SSE body.
       if (chunk.error !== null && typeof chunk.error === 'object') {
@@ -236,6 +244,9 @@ export async function* toStreamChunks(body, model, signal, limits = {}) {
       }
 
       const delta = chunkDelta(chunk)
+      if (delta.content !== '' || delta.reasoning !== '' || delta.toolCalls.length > 0) {
+        lastProgressAt = Date.now()
+      }
       if (delta.finish !== '') finish = delta.finish
       const frameUsage = chunkUsage(chunk)
       if (frameUsage !== undefined) usage = frameUsage

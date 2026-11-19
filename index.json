@@ -1,33 +1,28 @@
 {
   "format": 1,
   "title": {
-    "en": "FreeLLMAPI Auto",
-    "es": "FreeLLMAPI Auto"
+    "en": "FreeLLMAPI Auto"
   },
   "description": {
-    "en": "A DeepSeek Harness bundle that routes free-tier model providers with context- and TPM-aware selection.",
-    "es": "Un bundle de DeepSeek Harness que enruta proveedores gratuitos con selección por contexto y TPM."
+    "en": "A DeepSeek Harness bundle that routes free-tier model providers with context- and TPM-aware selection."
   },
   "metadata": {
     "categories": {
       "routing": {
         "title": {
-          "en": "Routing",
-          "es": "Enrutamiento"
+          "en": "Routing"
         }
       }
     },
     "labels": {
       "failover": {
         "title": {
-          "en": "Failover",
-          "es": "Conmutación"
+          "en": "Failover"
         }
       },
       "llm-provider": {
         "title": {
-          "en": "LLM provider",
-          "es": "Proveedor LLM"
+          "en": "LLM provider"
         }
       }
     }
@@ -36,12 +31,10 @@
     {
       "name": "dsh-freellmapi-auto",
       "title": {
-        "en": "FreeLLMAPI Auto",
-        "es": "FreeLLMAPI Auto"
+        "en": "FreeLLMAPI Auto"
       },
       "description": {
-        "en": "Routes each turn across the free-tier providers your FreeLLMAPI store already holds, choosing by context fit, per-minute token budget, and recent health, and failing over silently when a route throttles or stalls.",
-        "es": "Enruta cada turno entre los proveedores gratuitos que ya tienes en tu almacén de FreeLLMAPI, eligiendo por ajuste de contexto, presupuesto de tokens por minuto y salud reciente, y conmutando en silencio cuando una ruta se satura o se congela."
+        "en": "Routes each turn across the free-tier providers your FreeLLMAPI store already holds, choosing by context fit, per-minute token budget, and recent health, and failing over silently when a route throttles or stalls."
       },
       "icon": "https://raw.githubusercontent.com/luciomerlo/dsh-freellmapi-auto/main/icon.svg",
       "author": "Lucio Merlo",
@@ -67,11 +60,11 @@
       "versions": [
         {
           "version": "1.0.0",
-          "publishTimestamp": 1795130477,
+          "publishTimestamp": 1795131569,
           "source": {
             "type": "git",
             "url": "https://github.com/luciomerlo/dsh-freellmapi-auto",
-            "commit": "4b6d268bc7f37a0a55cd22961f7e36f561d854de"
+            "commit": "5653280e62bfa37f2b4b7cd78480ba649ad9f16e"
           }
         }
       ]

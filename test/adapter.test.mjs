@@ -333,6 +333,49 @@ test('the harness retry policy is finite and covers post-output failures', () =>
   assert.equal(harnessRetryPolicy({}).maxRetries, 1)
 })
 
+test('every advertised entry satisfies the harness catalog contract', async () => {
+  const { adapter } = await run({
+    models: [
+      route({ modelId: 'one', pin: 'groq/one', bucket: 'groq:1' }),
+      route({ modelId: 'two', pin: 'cerebras/two', platform: 'cerebras', bucket: 'cerebras:2' }),
+    ],
+    script: {},
+  })
+  for (const provider of ['freellmapi-auto', 'freellmapi-large-context', 'freellmapi-fast', 'freellmapi-coding', 'freellmapi-models']) {
+    const models = await adapter.listModels(provider)
+    assert.ok(models.length > 0, provider)
+    const seen = new Set()
+    for (const model of models) {
+      // The llm service rejects the whole provider when `provider` names the
+      // wrong route, so this is the exact condition that broke the picker.
+      assert.equal(model.provider, provider, `${provider}: ${model.id} names the wrong route`)
+      assert.ok(model.id.length > 0)
+      assert.ok(model.name.length > 0)
+      assert.equal(seen.has(model.id), false, `${provider}: duplicate id ${model.id}`)
+      seen.add(model.id)
+
+      const resolved = await adapter.resolveModel(provider, model.id)
+      assert.equal(resolved.provider, provider)
+      assert.equal(resolved.id, model.id)
+      assert.ok(Number.isInteger(resolved.context.contextWindow) && resolved.context.contextWindow > 0)
+      assert.ok(Number.isSafeInteger(resolved.defaultMaxTokens) && resolved.defaultMaxTokens > 0)
+    }
+  }
+})
+
+test('fractional config values are normalized before they reach the catalog', async () => {
+  const { adapter } = await run({
+    models: [route({ modelId: 'one', pin: 'groq/one', bucket: 'groq:1' })],
+    script: {},
+    config: { defaultMaxOutputTokens: 8192.5, defaultContextWindow: 131072.7, autoContextWindow: 262144.2 },
+  })
+  const resolved = await adapter.resolveModel('freellmapi-auto', 'auto')
+  assert.equal(Number.isInteger(resolved.context.contextWindow), true)
+  assert.equal(Number.isSafeInteger(resolved.defaultMaxTokens), true)
+  const pinned = await adapter.resolveModel('freellmapi-auto', 'groq/one')
+  assert.equal(Number.isInteger(pinned.context.contextWindow), true)
+})
+
 test('provider metadata names the route', () => {
   const adapter = createAdapter({
     config: resolveConfig({}),
