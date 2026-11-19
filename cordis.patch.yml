@@ -1,0 +1,65 @@
+# Loader patch layer contributed by this bundle.
+#
+# Every value below is an ordinary plugin Config. Override any key from the
+# profile's own cordis.patch.yml: a row with the same id replaces this whole
+# config, so keep a complete object when you override it.
+- insert:
+    - id: freellmapi-auto
+      name: dsh-freellmapi-auto
+      config:
+        # Where the FreeLLMAPI desktop app keeps its SQLite store. Empty means
+        # "resolve it from the environment" (see src/paths.js).
+        dataDir: ''
+        syncOnStart: true
+        syncOnQuotaError: true
+        # Re-read the store at most this often while serving requests.
+        minSyncIntervalMs: 30000
+
+        # Routing surface.
+        autoModelName: 'Auto (FreeLLMApi)'
+        maxAttempts: 6
+        harnessMaxRetries: 1
+        requestTimeoutMs: 180000
+        # Abort and fail over when no token arrives within this deadline.
+        firstTokenTimeoutMs: 7000
+        # Abort a stream that stops producing frames for this long.
+        streamIdleTimeoutMs: 12000
+
+        # Token budgeting. The estimator is deliberately conservative.
+        tokensPerCharacter: 0.25
+        toolTokenOverhead: 12
+        requestTokenMargin: 512
+        defaultContextWindow: 131072
+        # Context the virtual Auto model reports to the harness. Compaction and
+        # context pressure are driven by this number.
+        autoContextWindow: 131072
+        defaultMaxOutputTokens: 8192
+
+        # Ranking weights (multipliers on the per-profile weights).
+        codingWeight: 1
+        healthWeight: 1
+        speedWeight: 1
+        capabilityWeight: 1
+        # Keep consecutive turns on distinct upstream providers.
+        diversityWindow: 2
+        # Fall back to small, fast models before failing the turn.
+        degradeToSmallModels: true
+
+        # Do not call providers whose remaining quota is known to be spent.
+        respectReportedQuota: true
+        # Seed per-minute windows with what FreeLLMAPI recorded very recently.
+        seedUsageWindowMs: 60000
+        # Ask gateways to report usage in-stream. Off by default because a few
+        # free gateways reject the extra field.
+        includeUsage: false
+        cooldownBaseMs: 20000
+        cooldownMaxMs: 900000
+
+        # Per-profile extra routes in the selector, and the size of the
+        # FreeLLMApi - Models group.
+        pinsPerRoute: 4
+        modelsRouteSize: 48
+
+        # Extra provider endpoints for platforms this plugin does not ship a
+        # default for: { "<platform>": { "baseUrl": "https://.../v1", "auth": "bearer" } }
+        endpoints: {}

@@ -1,0 +1,67 @@
+{
+  "name": "dsh-freellmapi-auto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FreeLLMAPI multi-provider router for DeepSeek Harness: context- and TPM-aware free-model routing with shared-quota cooldowns and zero-drop SSE failover.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "cordis-plugin",
+    "llm",
+    "router",
+    "freellmapi",
+    "failover",
+    "openai-compatible"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "check": "node scripts/check.mjs",
+    "build": "node scripts/check.mjs && node --test test/",
+    "index": "node scripts/gen-index.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/luciomerlo/dsh-freellmapi-auto.git"
+  },
+  "homepage": "https://github.com/luciomerlo/dsh-freellmapi-auto#readme",
+  "bugs": {
+    "url": "https://github.com/luciomerlo/dsh-freellmapi-auto/issues"
+  }
+}

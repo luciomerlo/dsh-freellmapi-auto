@@ -1,0 +1,73 @@
+{
+  "$comment": "Machine-readable mirror of package.json#dsh plus this plugin's runtime capabilities. DSH activation reads package.json; scripts/check.mjs fails when this file drifts from it.",
+  "name": "dsh-freellmapi-auto",
+  "version": "1.0.0",
+  "manifestVersion": 1,
+  "kind": "bundle",
+  "entry": {
+    "row": "freellmapi-auto",
+    "package": "dsh-freellmapi-auto",
+    "host": "./index.js",
+    "client": "./client.js",
+    "patch": "./cordis.patch.yml"
+  },
+  "requires": {
+    "services": ["llm"],
+    "optionalServices": ["webServer", "tokenMeter"]
+  },
+  "provides": {
+    "llmProviders": [
+      {
+        "id": "freellmapi-auto",
+        "displayName": "FreeLLMApi - Auto",
+        "virtualModels": ["auto"],
+        "routing": "context-tpm-aware-failover"
+      },
+      {
+        "id": "freellmapi-large-context",
+        "displayName": "FreeLLMApi - Large Context",
+        "virtualModels": ["auto"],
+        "routing": "context-tpm-aware-failover"
+      },
+      {
+        "id": "freellmapi-fast",
+        "displayName": "FreeLLMApi - Ultra Fast",
+        "virtualModels": ["auto"],
+        "routing": "context-tpm-aware-failover"
+      },
+      {
+        "id": "freellmapi-coding",
+        "displayName": "FreeLLMApi - Coding & Tools",
+        "virtualModels": ["auto"],
+        "routing": "context-tpm-aware-failover"
+      },
+      {
+        "id": "freellmapi-models",
+        "displayName": "FreeLLMApi - Models",
+        "virtualModels": [],
+        "routing": "pinned-upstream-routes"
+      }
+    ],
+    "httpRoutes": [
+      { "method": "GET", "path": "/freellmapi-auto/status" },
+      { "method": "POST", "path": "/freellmapi-auto/sync" }
+    ],
+    "uiSlots": [
+      { "slot": "conversation.composer.dock", "id": "freellmapi-status" }
+    ]
+  },
+  "upstream": {
+    "vendor": "FreeLLMAPI",
+    "documentation": "https://github.com/tashfeenahmed/freellmapi",
+    "protocol": {
+      "inventory": "read-only SQLite store at <dataDir>/freeapi.db",
+      "chat": "POST {baseUrl}/chat/completions (OpenAI-compatible, SSE)"
+    },
+    "environment": ["FREELMAPI_HOME"]
+  },
+  "credentials": {
+    "source": "FreeLLMAPI store",
+    "path": "<dataDir>/freeapi.db (api_keys, AES-256-GCM) + <dataDir>/.encryption-key",
+    "globalEnvironmentWrites": "none"
+  }
+}

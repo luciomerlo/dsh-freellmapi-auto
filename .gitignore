@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build and test output
+coverage/
+dist/
+*.tsbuildinfo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# FreeLLMAPI local data (never commit a store, a key, or a backup)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.freellmapi/
+freellmapi/
+backups/
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

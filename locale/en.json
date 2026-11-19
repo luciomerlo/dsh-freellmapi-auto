@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "FreeLLMAPI Auto",
+    "description": "Routes each turn across the free-tier providers your FreeLLMAPI store already holds, choosing by context fit, per-minute token budget, and recent health, and failing over silently when a route throttles or stalls.",
+    "detail": "docs/DETAIL.md"
+  }
+}
