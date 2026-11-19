@@ -67,11 +67,11 @@
       "versions": [
         {
           "version": "1.0.0",
-          "publishTimestamp": 1795130366,
+          "publishTimestamp": 1795130477,
           "source": {
             "type": "git",
             "url": "https://github.com/luciomerlo/dsh-freellmapi-auto",
-            "commit": "13abfdb097e44b6b3b8211d84bc3d0d218700b04"
+            "commit": "4b6d268bc7f37a0a55cd22961f7e36f561d854de"
           }
         }
       ]
