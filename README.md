@@ -147,22 +147,15 @@ one you need.
 
 ### From the plugin market
 
-Add this repository's index as a custom plugin source, then install from
-**Plugins → Discover**:
+Add this repository's index as a custom index source in **Plugins → Discover**,
+then install the bundle from that source:
 
 ```
 https://raw.githubusercontent.com/luciomerlo/dsh-freellmapi-auto/main/index.json
 ```
 
-To add it from a shell:
-
-```sh
-dsh plugin market set-indexes \
-  "https://raw.githubusercontent.com/luciomerlo/dsh-freellmapi-auto/main/index.json"
-```
-
 `index.json` is a format-1 plugin market index; each version pins an exact commit
-of this repository.
+of this repository, so the installed files are reproducible.
 
 ### Manual local install
 
@@ -172,16 +165,19 @@ cd dsh-freellmapi-auto
 node --test        # 60 tests, no network access required
 ```
 
-Then point the Harness at the directory:
+Then install the directory through the Harness:
 
-```sh
-dsh plugin install /absolute/path/to/dsh-freellmapi-auto
-```
+- In the Web GUI: **Plugins → Add plugin** and choose the cloned directory, or
+- from a shell, add it to a profile's dependencies and enable the bundle in
+  **Plugins**:
 
-Or install it from **Plugins → Add plugin** with the directory path.
+  ```sh
+  dsh plugin --profile desktop add link:/absolute/path/to/dsh-freellmapi-auto
+  ```
 
-Either way, follow with a restart if the Harness reports `restart-required`, and
-pick a **FreeLLMApi** group in the model selector.
+A bundle that reports `restart-required` needs a Harness restart before the new
+module generation is live. Afterwards, pick a **FreeLLMApi** group in the model
+selector.
 
 ### Requirements
 

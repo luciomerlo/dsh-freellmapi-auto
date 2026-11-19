@@ -47,9 +47,9 @@
     }
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "check": "node scripts/check.mjs",
-    "build": "node scripts/check.mjs && node --test test/",
+    "build": "node scripts/check.mjs && node --test",
     "index": "node scripts/gen-index.mjs"
   },
   "engines": {
