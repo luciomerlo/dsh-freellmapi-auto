@@ -88,24 +88,37 @@ See the profile patch row for the full list. The useful ones:
 
 ## Status surface
 
-The plugin owns two same-origin HTTP routes:
+The plugin owns four same-origin HTTP routes:
 
 - `GET /freellmapi-auto/status` — counters, reachable routes, per-bucket
   cooldowns, and the last turns.
 - `POST /freellmapi-auto/sync` — re-read the store now.
+- `GET` / `PUT /freellmapi-auto/settings` — the connection state.
+- `POST /freellmapi-auto/detect` — probe the local free ports for a proxy.
+
+## Settings → FreeLLMAPI
+
+One settings page, and nothing in the conversation. It picks the transport
+(direct providers, or the FreeLLMAPI proxy), sets the proxy host and port, detects
+a live proxy on the local ports, and saves through the profile's config editor.
+Port `0` means autodetect: the app's own `config.json` port first, then 31415,
+3000, 8000, 8080, 5000, and 11434. Detection calls `GET /v1/models` with the store's
+unified token, so a detected proxy is one that is running and accepts the token.
 
 The status route reports the active physical route, estimated tokens against that
 route's TPM, the silent-fallback counter, and every bucket in cooldown with its
-remaining time. The plugin draws nothing in the conversation: it registers no UI
-slot and adds no entry to the composer.
+remaining time. The plugin's only UI is the Settings page above; it adds nothing
+to the conversation.
 
 ## Limits worth knowing
 
 - Text only. Image and file blocks are projected as short markers, so a
   vision-capable route is not used for its vision.
 - Reasoning blocks are never sent back to providers.
-- The plugin talks to providers directly. It does not require, start, or proxy
-  through the FreeLLMAPI desktop app.
+- Direct routing calls each provider itself; the proxy transport hands one request
+  to the FreeLLMAPI app instead. Neither mode starts the app.
+- In proxy mode the plugin exposes one virtual model; per-provider routing and
+  cooldown are the app's, not this plugin's.
 - Endpoints are shipped from the upstream registry; a platform whose endpoint is
   account-scoped, search-only, or retired is listed but never called.
 - Cooldown state is in memory, so restarting DSH resets it. The store's own

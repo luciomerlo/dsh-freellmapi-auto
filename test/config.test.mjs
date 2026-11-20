@@ -31,6 +31,18 @@ test('invalid configuration is rejected with a readable message', () => {
   assert.throws(() => resolveConfig({ firstTokenTimeoutMs: -1 }), /firstTokenTimeoutMs must be a positive number/)
 })
 
+test('transport and proxy settings are validated', () => {
+  assert.equal(resolveConfig({}).transport, 'direct')
+  assert.equal(resolveConfig({}).proxyPort, 0)
+  assert.equal(resolveConfig({ transport: 'proxy', proxyPort: 31415 }).proxyPort, 31415)
+  assert.throws(() => resolveConfig({ transport: 'carrier-pigeon' }), /transport must be "direct" or "proxy"/)
+  assert.throws(() => resolveConfig({ proxyPort: -1 }), /proxyPort must be an integer in \[0, 65535\]/)
+  assert.throws(() => resolveConfig({ proxyPort: 70000 }), /proxyPort must be an integer in \[0, 65535\]/)
+  assert.throws(() => resolveConfig({ proxyPort: 80.5 }), /proxyPort must be an integer/)
+  assert.throws(() => resolveConfig({ proxyHost: '   ' }), /proxyHost must be a host name/)
+  assert.equal(resolveConfig({ proxyHost: 'http://127.0.0.1:31415/v1' }).proxyHost, 'http://127.0.0.1:31415/v1')
+})
+
 test('data directory candidates prefer configuration, then the environment, then platform defaults', () => {
   const windows = dataDirCandidates({ dataDir: 'C:/explicit' }, { FREELMAPI_HOME: 'C:/env', APPDATA: 'C:/appdata/roaming' }, 'win32')
   assert.equal(windows[0], 'C:/explicit')

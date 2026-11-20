@@ -54,6 +54,36 @@ actually have.
                      └──────────────────────────────┘        └───────────────┘
 ```
 
+### Two transports
+
+`transport: direct` (the default) is everything described above: this plugin reads
+the store, ranks routes, and calls the providers itself, with the keys the store
+holds.
+
+`transport: proxy` is the opposite trade: one request goes to the running
+FreeLLMAPI app on `http://127.0.0.1:<port>/v1` with the store's unified token, and
+that app decides the route. The plugin keeps its first-token and stall watchdogs
+and reports one virtual model, `Auto (FreeLLMApi proxy)`; routing and per-provider
+quirks belong to FreeLLMAPI.
+
+Both are chosen in **Settings → FreeLLMAPI**, which also detects the port.
+
+## Settings → FreeLLMAPI
+
+The plugin contributes one settings page, no other UI:
+
+| Control | Meaning |
+|---|---|
+| **Transport** | Direct providers, or the FreeLLMAPI proxy. |
+| **Host** | Proxy host, default `127.0.0.1`. A full URL is accepted and reduced to its host. |
+| **Proxy port** | `0` means autodetect: the app's own `config.json` port first, then `31415, 3000, 8000, 8080, 5000, 11434`. |
+| **Detect** | Probes those ports and reports the first live proxy with its published model count. |
+| **Test typed port** | Probes only the port in the field. |
+| **Save** | Writes the three values through the profile's config editor; the plugin restarts to apply them. |
+
+Detection calls `GET /v1/models` with the store's unified token, so "detected"
+means the proxy is up **and** accepts the token — not merely that a port is open.
+
 ### Inventory
 
 The adapter reads the SQLite store the FreeLLMAPI desktop app maintains
@@ -162,7 +192,7 @@ of this repository, so the installed files are reproducible.
 ```sh
 git clone https://github.com/luciomerlo/dsh-freellmapi-auto.git
 cd dsh-freellmapi-auto
-node --test        # 69 tests, no network access required
+node --test        # 84 tests, no network access required
 ```
 
 Then install the directory through the Harness:
@@ -209,6 +239,9 @@ Override any key from the profile's `cordis.patch.yml`:
 | Key | Default | Meaning |
 |---|---|---|
 | `dataDir` | resolved | Directory holding `freeapi.db` and `.encryption-key`. |
+| `transport` | `direct` | `direct` routes here; `proxy` sends one request to the FreeLLMAPI app. |
+| `proxyHost` | `127.0.0.1` | Proxy host for the proxy transport. |
+| `proxyPort` | `0` | Proxy port; `0` autodetects. |
 | `syncOnStart` | `true` | Read the inventory during activation. |
 | `syncOnQuotaError` | `true` | Re-read the store after a quota or throttle failure. |
 | `minSyncIntervalMs` | `30000` | Minimum gap between store reads while serving. |
@@ -262,15 +295,17 @@ here can break a native Claude CLI installation on the same machine.
 
 ## Observability
 
-Two same-origin HTTP routes:
+Three same-origin HTTP routes:
 
 - `GET /freellmapi-auto/status` — counters, reachable route count, per-bucket
   cooldowns, and the last turns: the physical route that answered
   (`cerebras → qwen-3-coder`), estimated tokens against that route's TPM cap, the
   silent-fallback counter, and every bucket in cooldown with its remaining time.
 - `POST /freellmapi-auto/sync` — re-read the store now.
+- `GET` / `PUT /freellmapi-auto/settings` and `POST /freellmapi-auto/detect` — the
+  connection state the Settings page reads and writes.
 
-The plugin adds no UI of its own; it registers no slot and draws nothing in the
+The plugin adds no other UI: it registers one settings page and nothing in the
 conversation. Read the status route, or watch the log:
 
 ```

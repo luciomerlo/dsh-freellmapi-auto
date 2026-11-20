@@ -71,6 +71,8 @@ export class Inventory {
     this.snapshot = EMPTY_SNAPSHOT
     /** @type {Map<string, string>} decrypted secrets keyed by store key id */
     this.secrets = new Map()
+    /** @type {string | undefined} */
+    this.cachedUnifiedKey = undefined
     /** @type {Buffer | undefined} */
     this.encryptionKey = undefined
     this.lastSyncAt = 0
@@ -365,6 +367,35 @@ export class Inventory {
    */
   modelByPin(pin) {
     return this.snapshot.pins.get(pin)
+  }
+
+  /**
+   * The store's own unified API key, used only by the proxy transport.
+   *
+   * This is the token the FreeLLMAPI app issues to its callers; it is stored in
+   * the settings table rather than in `api_keys`, and it is never one of the
+   * upstream provider keys.
+   *
+   * @returns {string | undefined} the token, when the store holds one.
+   */
+  unifiedKey() {
+    if (this.cachedUnifiedKey !== undefined) return this.cachedUnifiedKey
+    if (this.dbPath === '' || !existsSync(this.dbPath)) return undefined
+    try {
+      const { DatabaseSync } = requireSqlite()
+      const db = new DatabaseSync(this.dbPath, { readOnly: true })
+      try {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('unified_api_key')
+        const value = row === undefined ? '' : String(row.value).trim()
+        if (value !== '') this.cachedUnifiedKey = value
+        return value === '' ? undefined : value
+      } finally {
+        db.close()
+      }
+    } catch (error) {
+      this.logger.warn('freellmapi: reading the unified API key failed:', error instanceof Error ? error.message : error)
+      return undefined
+    }
   }
 }
 

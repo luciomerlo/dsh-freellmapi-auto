@@ -19,6 +19,14 @@ import { QuotaRegistry } from './src/buckets.js'
 import { PLUGIN_VERSION } from './src/identity.js'
 import { Inventory } from './src/inventory.js'
 import { resolveDataDir } from './src/paths.js'
+import { createProxyAdapter, PROXY_ROUTE } from './src/proxy-adapter.js'
+import {
+  candidatePorts,
+  detectProxy,
+  normalizeProxyHost,
+  probeProxy,
+  storeConfigPort,
+} from './src/proxy.js'
 import { ROUTE_IDS } from './src/ranking.js'
 import { Telemetry } from './src/telemetry.js'
 import { HttpTransport } from './src/transport.js'
@@ -29,6 +37,8 @@ export const inject = ['llm']
 /** HTTP paths this plugin owns. */
 export const STATUS_PATH = '/freellmapi-auto/status'
 export const SYNC_PATH = '/freellmapi-auto/sync'
+export const SETTINGS_PATH = '/freellmapi-auto/settings'
+export const DETECT_PATH = '/freellmapi-auto/detect'
 
 /** Default configuration; every key is overridable from the profile patch. */
 const DEFAULTS = Object.freeze({
@@ -36,6 +46,13 @@ const DEFAULTS = Object.freeze({
   syncOnStart: true,
   syncOnQuotaError: true,
   minSyncIntervalMs: 30_000,
+
+  // Transport: 'direct' calls each provider with the store's own key;
+  // 'proxy' sends one request to the FreeLLMAPI app and lets it route.
+  transport: 'direct',
+  proxyHost: '127.0.0.1',
+  // 0 means "detect": the app's config.json port, then the usual ports.
+  proxyPort: 0,
 
   autoModelName: 'Auto (FreeLLMApi)',
   maxAttempts: 6,
@@ -91,6 +108,15 @@ export function resolveConfig(input) {
   if (typeof config.autoModelName !== 'string' || config.autoModelName.trim() === '') {
     errors.push('autoModelName must be non-empty')
   }
+  if (config.transport !== 'direct' && config.transport !== 'proxy') {
+    errors.push('transport must be "direct" or "proxy"')
+  }
+  if (typeof config.proxyHost !== 'string' || normalizeProxyHost(config.proxyHost) === '') {
+    errors.push('proxyHost must be a host name or an absolute URL')
+  }
+  if (!Number.isInteger(config.proxyPort) || config.proxyPort < 0 || config.proxyPort > 65_535) {
+    errors.push('proxyPort must be an integer in [0, 65535], where 0 means autodetect')
+  }
   for (const key of ['requestTimeoutMs', 'firstTokenTimeoutMs', 'streamIdleTimeoutMs', 'minSyncIntervalMs']) positive(key)
   for (const key of ['tokensPerCharacter', 'requestTokenMargin', 'defaultContextWindow', 'autoContextWindow', 'defaultMaxOutputTokens', 'cooldownBaseMs', 'cooldownMaxMs']) positive(key)
   if (!(config.tokensPerCharacter > 0 && config.tokensPerCharacter <= 1)) {
@@ -128,9 +154,13 @@ export function apply(ctx, input) {
   const telemetry = new Telemetry()
   const transport = new HttpTransport({ config, logger })
   const tokenMeter = ctx.get?.('tokenMeter')
-  const adapter = createAdapter({ config, inventory, quotas, transport, telemetry, logger, tokenMeter })
+  const usingProxy = config.transport === 'proxy'
+  const adapter = usingProxy
+    ? createProxyAdapter({ config, inventory, transport, telemetry, logger })
+    : createAdapter({ config, inventory, quotas, transport, telemetry, logger, tokenMeter })
+  const routes = usingProxy ? [PROXY_ROUTE] : [...ROUTE_IDS]
 
-  const registration = ctx.llm.registerAdapter([...ROUTE_IDS], adapter)
+  const registration = ctx.llm.registerAdapter(routes, adapter)
   if (registration === undefined || typeof registration !== 'function') {
     throw new Error('freellmapi-auto: the llm service refused the adapter registration')
   }
@@ -175,6 +205,70 @@ export function apply(ctx, input) {
     res.end(body)
   }
 
+  /**
+   * Read a small JSON request body.
+   * @param {any} req - the incoming request.
+   * @param {number} [limit] - largest accepted body.
+   * @returns {Promise<Record<string, unknown>>} the parsed body.
+   */
+  async function readJsonBody(req, limit = 16_384) {
+    const chunks = []
+    let size = 0
+    for await (const chunk of req) {
+      size += chunk.length
+      if (size > limit) throw new Error('request body is too large')
+      chunks.push(chunk)
+    }
+    const text = Buffer.concat(chunks).toString('utf8').trim()
+    if (text === '') return {}
+    const parsed = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('request body must be a JSON object')
+    }
+    return parsed
+  }
+
+  /** Last proxy probe, so a settings page cannot turn into a port scanner. */
+  let probeCache = { at: 0, value: undefined }
+
+  /**
+   * Probe the local FreeLLMAPI proxy, reusing a recent answer.
+   * @param {boolean} [force] - probe again instead of reusing the cache.
+   * @returns {Promise<Record<string, unknown>>} the proxy state.
+   */
+  async function proxyState(force = false) {
+    if (!force && probeCache.value !== undefined && Date.now() - probeCache.at < 10_000) {
+      return probeCache.value
+    }
+    const host = normalizeProxyHost(config.proxyHost)
+    const apiKey = inventory.unifiedKey() ?? ''
+    const configured = Number(config.proxyPort) || 0
+    const detected = await detectProxy({
+      host,
+      candidates: candidatePorts({ configured, storePort: storeConfigPort(inventory.dataDir) }),
+      apiKey,
+    })
+    const value = detected.found === undefined
+      ? {
+        found: false,
+        host,
+        port: 0,
+        models: 0,
+        checkedAt: Date.now(),
+        tried: detected.tried.map((entry) => ({ port: entry.port, ok: entry.ok, detail: entry.detail })),
+      }
+      : {
+        found: true,
+        host: detected.found.host,
+        port: detected.found.port,
+        models: detected.found.models,
+        checkedAt: Date.now(),
+        tried: detected.tried.map((entry) => ({ port: entry.port, ok: entry.ok, detail: entry.detail })),
+      }
+    probeCache = { at: Date.now(), value }
+    return value
+  }
+
   ctx.effect(() => {
     const disposers = []
     const webServer = ctx.get?.('webServer')
@@ -211,6 +305,122 @@ export function apply(ctx, input) {
           }
         },
       }))
+      disposers.push(webServer.register({
+        kind: 'exact',
+        path: SETTINGS_PATH,
+        handler: async (req, res) => {
+          try {
+            if (req.method === 'GET' || req.method === 'HEAD') {
+              const store = inventory.snapshot
+              sendJson(res, 200, {
+                ok: true,
+                version: PLUGIN_VERSION,
+                transport: config.transport,
+                proxyHost: config.proxyHost,
+                proxyPort: config.proxyPort,
+                routes: config.transport === 'proxy' ? [PROXY_ROUTE] : [...ROUTE_IDS],
+                store: {
+                  dbPath: store.dbPath,
+                  available: store.available,
+                  models: store.models.length,
+                  warnings: store.warnings,
+                },
+                proxy: await proxyState(),
+                probePorts: candidatePorts({
+                  configured: Number(config.proxyPort) || 0,
+                  storePort: storeConfigPort(inventory.dataDir),
+                }),
+                canSave: ctx.get?.('configEditor') !== undefined && ctx.fiber?.entry !== undefined,
+              })
+              return
+            }
+            if (req.method !== 'PUT') {
+              sendJson(res, 405, { ok: false, error: 'method not allowed' })
+              return
+            }
+
+            const body = await readJsonBody(req)
+            const transportMode = body.transport
+            const host = normalizeProxyHost(body.proxyHost)
+            const port = Number(body.proxyPort)
+            if (transportMode !== 'direct' && transportMode !== 'proxy') {
+              sendJson(res, 400, { ok: false, error: 'transport must be "direct" or "proxy"' })
+              return
+            }
+            if (host === '') {
+              sendJson(res, 400, { ok: false, error: 'proxyHost must be a host name' })
+              return
+            }
+            if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+              sendJson(res, 400, { ok: false, error: 'proxyPort must be an integer in [0, 65535]' })
+              return
+            }
+
+            const editor = ctx.get?.('configEditor')
+            const entry = ctx.fiber?.entry
+            if (editor === undefined || entry === undefined) {
+              sendJson(res, 409, {
+                ok: false,
+                error: 'this profile cannot save plugin configuration; edit the row in cordis.patch.yml instead',
+              })
+              return
+            }
+            await editor.edit(entry, (current) => ({ ...current, transport: transportMode, proxyHost: host, proxyPort: port }))
+            sendJson(res, 200, {
+              ok: true,
+              saved: { transport: transportMode, proxyHost: host, proxyPort: port },
+              // Editing an ordinary field restarts the plugin so `apply` rebuilds state.
+              restartRequired: true,
+            })
+          } catch (error) {
+            sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : String(error) })
+          }
+        },
+      }))
+      disposers.push(webServer.register({
+        kind: 'exact',
+        path: DETECT_PATH,
+        handler: async (req, res) => {
+          if (req.method !== 'POST') {
+            sendJson(res, 405, { ok: false, error: 'method not allowed' })
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const host = normalizeProxyHost(body.proxyHost ?? config.proxyHost)
+            const requested = Number(body.proxyPort)
+            if (host === '') {
+              sendJson(res, 400, { ok: false, error: 'proxyHost must be a host name' })
+              return
+            }
+            if (Number.isInteger(requested) && requested > 0) {
+              if (requested > 65_535) {
+                sendJson(res, 400, { ok: false, error: 'proxyPort must be at most 65535' })
+                return
+              }
+              const probe = await probeProxy({ host, port: requested, apiKey: inventory.unifiedKey() ?? '' })
+              const value = {
+                found: probe.ok,
+                host,
+                port: probe.ok ? requested : 0,
+                models: probe.models,
+                checkedAt: Date.now(),
+                tried: [{ port: requested, ok: probe.ok, detail: probe.detail }],
+              }
+              if (probe.ok) probeCache = { at: Date.now(), value }
+              sendJson(res, 200, { ok: true, proxy: value })
+              return
+            }
+            const value = await proxyState(true)
+            if (typeof adapter.refreshEndpoint === 'function') {
+              await adapter.refreshEndpoint().catch(() => {})
+            }
+            sendJson(res, 200, { ok: true, proxy: value })
+          } catch (error) {
+            sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : String(error) })
+          }
+        },
+      }))
     }
 
     if (config.syncOnStart !== false) syncInventory('startup')
@@ -228,6 +438,13 @@ export function apply(ctx, input) {
         'freellmapi: no usable store; the routes stay selectable but every request will '
         + `report NO_MODEL_AVAILABLE until ${resolveDataDir(config)} holds freeapi.db`,
       )
+    }
+    if (usingProxy) {
+      logger.info('freellmapi: proxy transport selected; turns are routed by the FreeLLMAPI app')
+      void proxyState().then((state) => {
+        if (state.found) logger.info(`freellmapi: proxy found on port ${String(state.port)} (${String(state.models)} models)`)
+        else logger.warn('freellmapi: no FreeLLMAPI proxy found; open Settings and set the port, or switch to direct routing')
+      }).catch(() => {})
     }
 
     return () => {

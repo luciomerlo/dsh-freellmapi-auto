@@ -8,6 +8,7 @@
     "row": "freellmapi-auto",
     "package": "dsh-freellmapi-auto",
     "host": "./index.js",
+    "client": "./client.js",
     "patch": "./cordis.patch.yml"
   },
   "requires": {
@@ -49,7 +50,12 @@
     ],
     "httpRoutes": [
       { "method": "GET", "path": "/freellmapi-auto/status" },
-      { "method": "POST", "path": "/freellmapi-auto/sync" }
+      { "method": "POST", "path": "/freellmapi-auto/sync" },
+      { "method": "GET, PUT", "path": "/freellmapi-auto/settings" },
+      { "method": "POST", "path": "/freellmapi-auto/detect" }
+    ],
+    "uiSlots": [
+      { "slot": "settings.section", "id": "freellmapi-auto" }
     ]
   },
   "upstream": {
