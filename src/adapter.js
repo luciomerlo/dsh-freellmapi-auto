@@ -563,6 +563,20 @@ export function createAdapter(parts) {
     },
 
     /**
+     * This adapter charges no provider-side visual tokens for a request image.
+     *
+     * The method must exist: `LlmRuntime.imageRequestPricing` calls it on the
+     * registered object rather than on the abstract base class, and compaction
+     * asks for it on every model switch. A missing method turns a model switch
+     * into `MODEL_SWITCH_COMPACTION_FAILED`.
+     *
+     * @returns {undefined} no image pricing is declared for these routes.
+     */
+    imageRequestPricing() {
+      return undefined
+    },
+
+    /**
      * @param {string} _provider - the route.
      * @param {string} _model - the model id.
      * @param {{width: number, height: number, bytes: number}} image - the normalized image.

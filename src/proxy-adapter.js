@@ -207,6 +207,19 @@ export function createProxyAdapter(parts) {
     },
 
     /**
+     * This adapter charges no provider-side visual tokens for a request image.
+     *
+     * The method must exist: the runtime calls it on the registered object, not
+     * on the abstract base class, and compaction asks for it on every model
+     * switch.
+     *
+     * @returns {undefined} no image pricing is declared for this route.
+     */
+    imageRequestPricing() {
+      return undefined
+    },
+
+    /**
      * @param {string} _provider - the route.
      * @param {string} _model - the model id.
      * @param {{width: number, height: number, bytes: number}} image - the normalized image.

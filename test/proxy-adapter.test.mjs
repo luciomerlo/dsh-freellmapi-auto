@@ -134,6 +134,31 @@ test('a stopped proxy ends the turn with PROXY_UNREACHABLE', async () => {
   assert.equal(finish.reason.failure.code, 'PROXY_UNREACHABLE')
 })
 
+test('the proxy adapter exposes every method the llm runtime may call', async () => {
+  const server = await serve((res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.end('data: [DONE]\n\n')
+  })
+  try {
+    const { adapter } = build(server.port)
+    for (const method of [
+      'providerInfo',
+      'providerRetryPolicy',
+      'imageRequestPricing',
+      'imageRequestTarget',
+      'listModels',
+      'resolveModel',
+      'prepareCall',
+      'stream',
+    ]) {
+      assert.equal(typeof adapter[method], 'function', `${method} must exist`)
+    }
+    assert.equal(adapter.imageRequestPricing(PROXY_ROUTE, PROXY_AUTO_ID), undefined)
+  } finally {
+    await server.close()
+  }
+})
+
 test('the status surface also works in proxy mode', async () => {
   const server = await serve((res) => {
     res.writeHead(200, { 'content-type': 'text/event-stream' })

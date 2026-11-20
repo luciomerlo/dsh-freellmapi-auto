@@ -376,6 +376,34 @@ test('fractional config values are normalized before they reach the catalog', as
   assert.equal(Number.isInteger(pinned.context.contextWindow), true)
 })
 
+test('the adapter exposes every method the llm runtime may call', async () => {
+  const { adapter } = await run({
+    models: [route({ modelId: 'one', pin: 'groq/one', bucket: 'groq:1' })],
+    script: {},
+  })
+  // The runtime calls these on the registered object, not on the abstract base
+  // class. `imageRequestPricing` in particular is asked for on every model
+  // switch, and a missing method fails the switch with
+  // MODEL_SWITCH_COMPACTION_FAILED.
+  for (const method of [
+    'providerInfo',
+    'providerRetryPolicy',
+    'imageRequestPricing',
+    'imageRequestTarget',
+    'listModels',
+    'resolveModel',
+    'prepareCall',
+    'stream',
+  ]) {
+    assert.equal(typeof adapter[method], 'function', `${method} must exist`)
+  }
+  assert.equal(adapter.imageRequestPricing('freellmapi-auto', 'auto'), undefined)
+  assert.deepEqual(
+    adapter.imageRequestTarget('freellmapi-auto', 'auto', { width: 10, height: 20, bytes: 30 }),
+    { width: 10, height: 20, maxBytes: 30 },
+  )
+})
+
 test('provider metadata names the route', () => {
   const adapter = createAdapter({
     config: resolveConfig({}),
